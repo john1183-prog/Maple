@@ -1,10 +1,18 @@
+import { useState } from "react";
 import FileAIResponse from "./FileAIResponse";
+import MessageBox from "./messagebox";
 type displayProps = {
   files: File[];
   option: string;
 };
 
 function DisplayResult({ files, option }: displayProps) {
+  const [response, setResponse] = useState<any>(
+    <FileAIResponse
+      files={files}
+      prompt={` Based on this document ${option} in plain English:`}
+    />
+  );
   return (
     <div className="grid grid-rows-3 h-full gap-2">
       <div className="grid grid-cols-2 gap-1">
@@ -25,13 +33,13 @@ function DisplayResult({ files, option }: displayProps) {
       </div>
       <div className="rounded-2xl bg-[#ffffff85] border-white border p-6 row-span-2">
         <header className="text-purple-950 text-xl">Result</header>
-        <p>
-          <FileAIResponse
-            files={files}
-            prompt="Summarize this document in plain English:"
-          />
-        </p>
+        <div>{response}</div>
       </div>
+      <MessageBox
+        onSend={(prompt) =>
+          setResponse(<FileAIResponse files={files} prompt={prompt} />)
+        }
+      />
     </div>
   );
 }

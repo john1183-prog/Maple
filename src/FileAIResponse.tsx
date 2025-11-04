@@ -3,10 +3,10 @@ import * as pdfjsLib from "pdfjs-dist";
 import Tesseract from "tesseract.js";
 
 // PDF.js worker setup
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.js`;
+pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdfjs/pdf.worker.min.mjs";
 
 interface FileAIResponseProps {
-  files: File[]; // Array of uploaded files (PDFs or images)
+  files?: File[]; // Array of uploaded files (PDFs or images)
   prompt: string; // Custom AI prompt, e.g. "Summarize the following:"
   model?: string; // Optional AI model, defaults to "tinyllama"
 }

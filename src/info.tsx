@@ -3,7 +3,7 @@ type infoprops = {
 };
 function Info({ info }: infoprops) {
   return (
-    <div className="w-full text-white bg-gradient-to-l from-blue-500 to-purple-600 m-auto rounded-lg p-2 px-1 text-2xl">
+    <div className="m-auto text-2xl text-white">
       <p>{info}</p>
     </div>
   );

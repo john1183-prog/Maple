@@ -5,16 +5,14 @@ type Uploadprops = {
 function Uploadbtn({ onChange }: Uploadprops) {
   return (
     <div className="flex items-center justify-center h-full">
-      <div className="bg-[#ffffff8f] border-2 border-dashed border-black p-4">
-        <input
-          multiple
-          className="cursor-pointer"
-          type="file"
-          name=""
-          id=""
-          onChange={onChange}
-        />
-      </div>
+      <input
+        multiple
+        className="cursor-pointer block bg-white/30 border-2 border-dashed border-blue-900 p-4 text-sm md:text-xl"
+        type="file"
+        name=""
+        id=""
+        onChange={onChange}
+      />
     </div>
   );
 }

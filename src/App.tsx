@@ -13,9 +13,10 @@ function App() {
   const [shouldDisplay, setshouldDisplay] = useState<boolean>(false);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-r from-blue-500 to-purple-600">
-      <div className="flex flex-col items-center justify-around text-center p-5 rounded-lg w-[90vw] h-[90vw] gap-5">
-        <div className="h-full w-11/12 p-6 overflow-y-auto bg-[#FFFFFF15]">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-r from-blue-500 to-purple-600 p-4">
+      <div className="flex flex-col items-center justify-around text-center p-1 gap-2 md:p-2 rounded-lg w-fit md:w-3/4 h-full bg-[#FFFFFF15]">
+        <Info info={info} />
+        <div className="h-full w-full p-2 overflow-y-auto">
           {shouldDisplay ? (
             <DisplayResult files={files} option={optionchosen} />
           ) : !(files.length > 0) ? (
@@ -26,9 +27,9 @@ function App() {
               }}
             />
           ) : (
-            <div className="grid grid-cols-2 gap-3 p-5">
+            <div className="flex gap-3 flex-wrap md:flex-nowrap">
               <Option
-                option="Option 1"
+                option="Give me an optimized note"
                 src="src\assets\notes.jpeg"
                 onClick={() => {
                   setshouldDisplay(true);
@@ -37,7 +38,7 @@ function App() {
                 }}
               />
               <Option
-                option="Option 2"
+                option="Guess possible questions"
                 src="src\assets\guess.jpeg"
                 onClick={() => {
                   setshouldDisplay(true);
@@ -46,7 +47,7 @@ function App() {
                 }}
               />
               <Option
-                option="Option 3"
+                option="Quiz me"
                 src="src\assets\quiz.jpeg"
                 onClick={() => {
                   setshouldDisplay(true);
@@ -57,7 +58,6 @@ function App() {
             </div>
           )}
         </div>
-        <Info info={info} />
       </div>
     </div>
   );
