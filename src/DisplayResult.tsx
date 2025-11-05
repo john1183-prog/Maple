@@ -1,16 +1,17 @@
 import { useState } from "react";
 import FileAIResponse from "./FileAIResponse";
-import MessageBox from "./messagebox";
+import MessageBox from "./MessageBox";
 type displayProps = {
   files: File[];
   option: string;
+  preprompt: string;
 };
 
-function DisplayResult({ files, option }: displayProps) {
+function DisplayResult({ files, option, preprompt }: displayProps) {
   const [response, setResponse] = useState<any>(
     <FileAIResponse
       files={files}
-      prompt={` Based on this document ${option} in plain English:`}
+      prompt={` Based on the writeup ${preprompt} in plain English:`}
     />
   );
   return (

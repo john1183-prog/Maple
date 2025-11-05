@@ -6,6 +6,7 @@ import Uploadbtn from "./Uploadbtn";
 
 function App() {
   const [optionchosen, setoptionchosen] = useState<string>("Nothing selected");
+  const [preprompt, setPreprompt] = useState<string>("");
   const [files, setFiles] = useState<File[]>([]);
   const [info, setInfo] = useState<string>(
     "First, Select your notes and past questions..."
@@ -18,7 +19,11 @@ function App() {
         <Info info={info} />
         <div className="h-full w-full p-2 overflow-y-auto">
           {shouldDisplay ? (
-            <DisplayResult files={files} option={optionchosen} />
+            <DisplayResult
+              files={files}
+              option={optionchosen}
+              preprompt={preprompt}
+            />
           ) : !(files.length > 0) ? (
             <Uploadbtn
               onChange={(e: ChangeEvent<HTMLInputElement>) => {
@@ -30,29 +35,36 @@ function App() {
             <div className="flex gap-3 flex-wrap md:flex-nowrap">
               <Option
                 option="Give me an optimized note"
-                src="src\assets\notes.jpeg"
+                src="\notes.jpeg"
                 onClick={() => {
                   setshouldDisplay(true);
                   setoptionchosen("Notes");
                   setInfo("What else would you like to do?");
+                  setPreprompt(
+                    "Give me an optimized note that summarizes this"
+                  );
                 }}
               />
               <Option
                 option="Guess possible questions"
-                src="src\assets\guess.jpeg"
+                src="/guess.jpeg"
                 onClick={() => {
                   setshouldDisplay(true);
                   setoptionchosen("Guess");
                   setInfo("What else would you like to do?");
+                  setPreprompt(
+                    "Guess 10 possible questions that can be asked from this"
+                  );
                 }}
               />
               <Option
                 option="Quiz me"
-                src="src\assets\quiz.jpeg"
+                src="\quiz.jpeg"
                 onClick={() => {
                   setshouldDisplay(true);
                   setoptionchosen("Quiz");
                   setInfo("What else would you like to do?");
+                  setPreprompt("Quiz me based on this");
                 }}
               />
             </div>
