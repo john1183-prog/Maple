@@ -1,6 +1,6 @@
 import { useState } from "react";
 import FileAIResponse from "./FileAIResponse";
-import MessageBox from "./messagebox";
+import MessageBox from "./MessageBox";
 type displayProps = {
   files: File[];
   option: string;
