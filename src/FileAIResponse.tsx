@@ -40,7 +40,7 @@ const FileAIResponse: React.FC<FileAIResponseProps> = ({
           }
         }
 
-        const MAX_TEXT_LENGTH = 8000;
+        const MAX_TEXT_LENGTH = 4000;
 
         if (combinedText.length > MAX_TEXT_LENGTH) {
           console.log(
