@@ -40,6 +40,17 @@ const FileAIResponse: React.FC<FileAIResponseProps> = ({
           }
         }
 
+        const MAX_TEXT_LENGTH = 8000;
+
+        if (combinedText.length > MAX_TEXT_LENGTH) {
+          console.log(
+            `Text too long (${combinedText.length}), shortening to ${MAX_TEXT_LENGTH}`
+          );
+          combinedText = combinedText.substring(0, MAX_TEXT_LENGTH);
+          combinedText +=
+            "\n\n... [Note: Text was shortened to fit API limits]";
+        }
+
         // 2️⃣ Generate AI response
         const fullPrompt = `${prompt}\n\n${combinedText.trim()}`;
         const aiText = await generateAI(fullPrompt, model);
