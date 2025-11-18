@@ -1,14 +1,15 @@
 import React, { useEffect, useState } from "react";
 import * as pdfjsLib from "pdfjs-dist";
 import Tesseract from "tesseract.js";
+import mammoth from "mammoth"; // Import mammoth for .docx
 
-// PDF.js worker setup
+// PDF.js worker setup (Keep your existing path)
 pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdfjs/pdf.worker.min.mjs";
 
 interface FileAIResponseProps {
-  files?: File[]; // Array of uploaded files (PDFs or images)
-  prompt: string; // Custom AI prompt, e.g. "Summarize the following:"
-  model?: string; // Optional AI model, defaults to "tinyllama"
+  files?: File[];
+  prompt: string;
+  model?: string;
 }
 
 const FileAIResponse: React.FC<FileAIResponseProps> = ({
@@ -18,6 +19,7 @@ const FileAIResponse: React.FC<FileAIResponseProps> = ({
 }) => {
   const [aiResponse, setAIResponse] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string>(""); // Granular status updates
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -27,77 +29,115 @@ const FileAIResponse: React.FC<FileAIResponseProps> = ({
       setLoading(true);
       setError(null);
       setAIResponse(null);
+      setStatusMessage("Reading files...");
 
       try {
-        // 1️⃣ Extract all text
+        // 1️⃣ Extract all text based on file type
         let combinedText = "";
+
         for (const file of files) {
           const type = file.type.toLowerCase();
-          if (type.includes("pdf")) {
-            combinedText += await extractPDF(file);
-          } else if (type.includes("image")) {
-            combinedText += await extractImage(file);
+          const name = file.name.toLowerCase();
+
+          setStatusMessage(`Processing ${file.name}...`);
+
+          try {
+            if (type.includes("pdf")) {
+              combinedText += await extractPDF(file);
+            } else if (type.includes("image")) {
+              combinedText += await extractImage(file);
+            } else if (
+              type.includes("wordprocessingml") ||
+              name.endsWith(".docx")
+            ) {
+              combinedText += await extractDocx(file);
+            } else if (
+              type.includes("text") ||
+              name.endsWith(".txt") ||
+              name.endsWith(".md") ||
+              name.endsWith(".csv") ||
+              name.endsWith(".json")
+            ) {
+              combinedText += await extractPlainText(file);
+            } else {
+              console.warn(`Unsupported file type: ${type}`);
+            }
+
+            // Add a separator between files for the AI
+            combinedText += "\n\n--- FILE SEPARATOR ---\n\n";
+          } catch (extractError) {
+            console.error(`Failed to read ${file.name}`, extractError);
+            // We continue loop even if one file fails
           }
         }
 
-        const MAX_TEXT_LENGTH = 4000;
-
-        if (combinedText.length > MAX_TEXT_LENGTH) {
-          console.log(
-            `Text too long (${combinedText.length}), shortening to ${MAX_TEXT_LENGTH}`
-          );
-          combinedText = combinedText.substring(0, MAX_TEXT_LENGTH);
-          combinedText +=
-            "\n\n... [Note: Text was shortened to fit API limits]";
+        if (!combinedText.trim()) {
+          throw new Error("No readable text found in the uploaded files.");
         }
 
-        // 2️⃣ Generate AI response
-        const fullPrompt = `${prompt}\n\n${combinedText.trim()}`;
+        // 2️⃣ Truncate text to fit Context Window
+        const MAX_TEXT_LENGTH = 6000; // Increased slightly for safety
+        if (combinedText.length > MAX_TEXT_LENGTH) {
+          setStatusMessage("Text too long. Truncating...");
+          combinedText = combinedText.substring(0, MAX_TEXT_LENGTH);
+          combinedText += "\n\n[Note: Input was truncated to fit API limits]";
+        }
+
+        // 3️⃣ Generate AI response
+        setStatusMessage("Waiting for AI...");
+        const fullPrompt = `${prompt}\n\nContext:\n${combinedText.trim()}`;
         const aiText = await generateAI(fullPrompt, model);
+
         setAIResponse(aiText);
       } catch (err: any) {
         setError(err.message || "An error occurred.");
       } finally {
         setLoading(false);
+        setStatusMessage("");
       }
     };
 
     processFiles();
   }, [files, prompt, model]);
 
-  // --- PDF Extraction ---
+  // --- 1. PDF Extraction ---
   const extractPDF = async (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = async () => {
-        try {
-          const typedArray = new Uint8Array(reader.result as ArrayBuffer);
-          const pdf = await pdfjsLib.getDocument({ data: typedArray }).promise;
-          let text = "";
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    let text = `--- START PDF: ${file.name} ---\n`;
 
-          for (let i = 1; i <= pdf.numPages; i++) {
-            const page = await pdf.getPage(i);
-            const content = await page.getTextContent();
-            text += content.items.map((i: any) => i.str).join(" ") + "\n";
-          }
-
-          resolve(text);
-        } catch (e) {
-          reject(e);
-        }
-      };
-      reader.readAsArrayBuffer(file);
-    });
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      // Adding \n preserves paragraph structure better than space
+      const pageText = content.items.map((item: any) => item.str).join(" ");
+      text += pageText + "\n";
+    }
+    return text;
   };
 
-  // --- Image Extraction ---
+  // --- 2. DOCX Extraction (New) ---
+  const extractDocx = async (file: File): Promise<string> => {
+    const arrayBuffer = await file.arrayBuffer();
+    // extractRawText ignores formatting/images, perfect for LLMs
+    const result = await mammoth.extractRawText({ arrayBuffer });
+    return `--- START DOCX: ${file.name} ---\n${result.value}`;
+  };
+
+  // --- 3. Plain Text Extraction (New) ---
+  const extractPlainText = async (file: File): Promise<string> => {
+    const text = await file.text();
+    return `--- START TEXT: ${file.name} ---\n${text}`;
+  };
+
+  // --- 4. Image Extraction (OCR) ---
   const extractImage = async (file: File): Promise<string> => {
     const url = URL.createObjectURL(file);
     try {
       const {
         data: { text },
       } = await Tesseract.recognize(url, "eng");
-      return text + "\n";
+      return `--- START IMAGE: ${file.name} ---\n${text}`;
     } finally {
       URL.revokeObjectURL(url);
     }
@@ -121,12 +161,28 @@ const FileAIResponse: React.FC<FileAIResponseProps> = ({
   };
 
   // --- Render ---
-  if (loading)
-    return <p className="text-gray-400 animate-pulse">Processing...</p>;
+  if (loading) {
+    return (
+      <div className="space-y-2">
+        <p className="text-gray-400 animate-pulse">Processing...</p>
+        {statusMessage && (
+          <p className="text-xs text-gray-500">{statusMessage}</p>
+        )}
+      </div>
+    );
+  }
+
   if (error) return <p className="text-red-500 text-sm">⚠️ {error}</p>;
   if (!aiResponse) return null;
 
-  return <p className="whitespace-pre-wrap text-sm">{aiResponse}</p>;
+  return (
+    <div className="p-4 bg-gray-50 rounded border border-gray-200 mt-4">
+      <h3 className="font-bold mb-2 text-sm text-gray-700">AI Analysis:</h3>
+      <p className="whitespace-pre-wrap text-sm text-gray-800 leading-relaxed">
+        {aiResponse}
+      </p>
+    </div>
+  );
 };
 
 export default FileAIResponse;
