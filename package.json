@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "@tailwindcss/vite": "^4.1.11",
     "mammoth": "^1.11.0",
     "pdfjs-dist": "^5.4.394",

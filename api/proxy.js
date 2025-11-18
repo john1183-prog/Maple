@@ -1,41 +1,51 @@
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
 export default async function handler(req, res) {
+  // 1. CORS Headers (Allows your frontend to connect)
+  res.setHeader("Access-Control-Allow-Credentials", true);
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader(
+    "Access-Control-Allow-Methods",
+    "GET,OPTIONS,PATCH,DELETE,POST,PUT"
+  );
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version"
+  );
+
+  // 2. Handle Pre-flight check
+  if (req.method === "OPTIONS") return res.status(200).end();
+
+  // 3. Enforce POST
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method Not Allowed" });
+  }
+
   try {
-    const response = await fetch("https://mlvoca.com/api/generate", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(req.body),
+    const { prompt, model } = req.body;
+
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error(
+        "GEMINI_API_KEY is missing in Vercel Environment Variables"
+      );
+    }
+
+    // 4. Call Gemini
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const aiModel = genAI.getGenerativeModel({
+      model: model || "gemini-1.5-flash",
     });
 
-    const text = await response.text(); // get raw text
+    const result = await aiModel.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
 
-    // Try parsing as JSON
-    try {
-      const json = JSON.parse(text);
-
-      // YOUR IMPROVEMENT: Handle JSON error messages from the API
-      if (!response.ok) {
-        return res.status(response.status).json({
-          error: json.message || json.error || "API returned a JSON error",
-          raw: text.slice(0, 200),
-        });
-      }
-
-      // SUCCESS: Response is OK and is valid JSON
-      return res.status(response.status).json(json);
-    } catch {
-      // MY ORIGINAL CATCH: Handles ANY invalid JSON (like <html>)
-      // This is safer because it always reports an error if parse fails.
-      return res.status(response.status).json({
-        error: "Invalid JSON response from upstream API",
-        raw: text.slice(0, 200),
-      });
-    }
+    return res.status(200).json({ response: text });
   } catch (error) {
-    // This catches network errors (e.g., API is offline)
+    console.error("API Error:", error);
     return res.status(500).json({
-      error: error.message || "Proxy server error",
+      error: "Internal Server Error",
+      details: error.message,
     });
   }
 }
