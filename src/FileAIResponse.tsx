@@ -1,14 +1,10 @@
 import React, { useEffect, useState } from "react";
 import * as pdfjsLib from "pdfjs-dist";
-// @ts-ignore (Tesseract types can be tricky, ignore strict check)
 import Tesseract from "tesseract.js";
-import mammoth from "mammoth";
 
-// FIX: Import worker as a URL for Vite
-import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
-
-// Set the worker source
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
+// PDF.js worker setup
+pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdfjs/pdf.worker.min.mjs";
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "";
 
 interface FileAIResponseProps {
   files?: File[];
@@ -19,175 +15,134 @@ interface FileAIResponseProps {
 const FileAIResponse: React.FC<FileAIResponseProps> = ({
   files,
   prompt,
-  model = "gemini-1.5-flash",
+  // 🟢 CHANGED: Default to a valid Gemini model
+  model = "gemini-2.5-flash",
 }) => {
   const [aiResponse, setAIResponse] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [statusMessage, setStatusMessage] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
-
+  console.log("My Key is:", apiKey);
   useEffect(() => {
-    if ((!files || files.length === 0) && !prompt.trim()) return;
+    if (!files?.length || !prompt.trim()) return;
 
     const processFiles = async () => {
       setLoading(true);
       setError(null);
       setAIResponse(null);
 
-      if (files && files.length > 0) {
-        setStatusMessage("Reading documents...");
-      } else {
-        setStatusMessage("Thinking...");
-      }
-
       try {
+        // 1️⃣ Extract all text (Same as before)
         let combinedText = "";
-
-        if (files && files.length > 0) {
-          for (const file of files) {
-            const type = file.type.toLowerCase();
-            const name = file.name.toLowerCase();
-            setStatusMessage(`Processing ${file.name}...`);
-
-            try {
-              if (type.includes("pdf")) {
-                combinedText += await extractPDF(file);
-              } else if (type.includes("image")) {
-                combinedText += await extractImage(file);
-              } else if (
-                type.includes("wordprocessingml") ||
-                name.endsWith(".docx")
-              ) {
-                combinedText += await extractDocx(file);
-              } else if (
-                type.includes("text") ||
-                name.endsWith(".txt") ||
-                name.endsWith(".md") ||
-                name.endsWith(".ts") ||
-                name.endsWith(".tsx") ||
-                name.endsWith(".json")
-              ) {
-                combinedText += await extractPlainText(file);
-              }
-              combinedText += "\n\n--- FILE SEPARATOR ---\n\n";
-            } catch (extractError) {
-              console.error(`Failed to read ${file.name}`, extractError);
-            }
+        for (const file of files) {
+          const type = file.type.toLowerCase();
+          if (type.includes("pdf")) {
+            combinedText += await extractPDF(file);
+          } else if (type.includes("image")) {
+            combinedText += await extractImage(file);
           }
         }
 
-        const MAX_TEXT_LENGTH = 50000;
-        if (combinedText.length > MAX_TEXT_LENGTH) {
-          setStatusMessage("Document huge. Truncating...");
-          combinedText = combinedText.substring(0, MAX_TEXT_LENGTH);
-          combinedText += "\n\n[Truncated]";
-        }
-
-        setStatusMessage("Waiting for AI...");
-        const fullPrompt = combinedText
-          ? `${prompt}\n\nContext from files:\n${combinedText.trim()}`
-          : prompt;
-
-        const aiText = await generateAI(fullPrompt, model);
+        // 2️⃣ Generate AI response (Direct Call)
+        const fullPrompt = `${prompt}\n\n${combinedText.trim()}`;
+        const aiText = await generateGemini(fullPrompt, model, apiKey);
         setAIResponse(aiText);
       } catch (err: any) {
         setError(err.message || "An error occurred.");
       } finally {
         setLoading(false);
-        setStatusMessage("");
       }
     };
 
     processFiles();
-  }, [files, prompt, model]);
+  }, [files, prompt, model, apiKey]);
 
-  // --- Helpers ---
+  // --- PDF Extraction (Unchanged) ---
   const extractPDF = async (file: File): Promise<string> => {
-    const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-    let text = `--- START PDF: ${file.name} ---\n`;
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const content = await page.getTextContent();
-      text += content.items.map((item: any) => item.str).join(" ") + "\n";
-    }
-    return text;
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const typedArray = new Uint8Array(reader.result as ArrayBuffer);
+          const pdf = await pdfjsLib.getDocument({ data: typedArray }).promise;
+          let text = "";
+          for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const content = await page.getTextContent();
+            text += content.items.map((i: any) => i.str).join(" ") + "\n";
+          }
+          resolve(text);
+        } catch (e) {
+          reject(e);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    });
   };
 
-  const extractDocx = async (file: File): Promise<string> => {
-    const arrayBuffer = await file.arrayBuffer();
-    const result = await mammoth.extractRawText({ arrayBuffer });
-    return `--- START DOCX: ${file.name} ---\n${result.value}`;
-  };
-
-  const extractPlainText = async (file: File): Promise<string> => {
-    const text = await file.text();
-    return `--- START TEXT: ${file.name} ---\n${text}`;
-  };
-
+  // --- Image Extraction (Unchanged) ---
   const extractImage = async (file: File): Promise<string> => {
     const url = URL.createObjectURL(file);
     try {
       const {
         data: { text },
       } = await Tesseract.recognize(url, "eng");
-      return `--- START IMAGE: ${file.name} ---\n${text}`;
+      return text + "\n";
     } finally {
       URL.revokeObjectURL(url);
     }
   };
 
-  const generateAI = async (fullPrompt: string, model: string) => {
-    // Detect if we are on localhost (Vite) vs Vercel
-    const isLocal = window.location.hostname === "localhost";
+  // --- 🟢 NEW: Direct Gemini API Call ---
+  const generateGemini = async (
+    fullPrompt: string,
+    model: string,
+    key: string
+  ) => {
+    // 1. Construct the URL for the specific model
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
 
-    // If using 'npm run dev', the API isn't running. Warn the user.
-    // You MUST use 'vercel dev' to test locally.
+    // 2. Prepare the Request Body
+    const requestBody = {
+      contents: [
+        {
+          parts: [{ text: fullPrompt }],
+        },
+      ],
+    };
 
-    const res = await fetch("/api/proxy", {
+    // 3. Make the Fetch Call
+    const res = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model, prompt: fullPrompt }),
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(requestBody),
     });
 
     if (!res.ok) {
-      const body = await res.text();
-      throw new Error(`AI API error (${res.status}): ${body}`);
+      const errorData = await res.json();
+      throw new Error(
+        `Gemini API Error: ${errorData.error?.message || res.statusText}`
+      );
     }
 
     const data = await res.json();
-    return data.response || "No response";
+
+    // 4. Parse the confusing Gemini response structure
+    // Structure: data.candidates[0].content.parts[0].text
+    return (
+      data.candidates?.[0]?.content?.parts?.[0]?.text ||
+      "No response text found."
+    );
   };
 
-  if (loading) {
-    return (
-      <div className="space-y-2 mt-4 p-4 bg-blue-50 rounded text-blue-700">
-        <div className="flex items-center space-x-2">
-          <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-sm animate-pulse">{statusMessage}</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error)
-    return (
-      <div className="p-4 mt-4 bg-red-50 text-red-600 rounded text-sm">
-        ⚠️ {error}
-      </div>
-    );
+  // --- Render ---
+  if (loading)
+    return <p className="text-gray-400 animate-pulse">Processing...</p>;
+  if (error) return <p className="text-red-500 text-sm">⚠️ {error}</p>;
   if (!aiResponse) return null;
 
-  return (
-    <div className="p-6 bg-white rounded-lg shadow border border-gray-200 mt-4">
-      <h3 className="font-bold mb-4 text-gray-900 border-b pb-2">
-        AI Analysis
-      </h3>
-      <div className="prose prose-sm max-w-none text-gray-800 whitespace-pre-wrap leading-relaxed">
-        {aiResponse}
-      </div>
-    </div>
-  );
+  return <p className="whitespace-pre-wrap text-sm">{aiResponse}</p>;
 };
 
 export default FileAIResponse;
